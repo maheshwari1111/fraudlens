@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, LayoutDashboard, AlertTriangle, Briefcase, FileText } from 'lucide-react';
 
 const navItems = [
@@ -9,6 +10,8 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const location = useLocation();
+
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
@@ -37,8 +40,19 @@ export default function Layout() {
                 }`
               }
             >
-              <Icon className="w-4 h-4" />
-              {label}
+              {({ isActive }) => (
+                <>
+                  <Icon className="w-4 h-4" />
+                  {label}
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeNav"
+                      className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-400"
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -52,7 +66,17 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <Outlet />
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   );
