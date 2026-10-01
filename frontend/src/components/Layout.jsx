@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, LayoutDashboard, AlertTriangle, Briefcase, FileText, Activity, Bell, Search, Radio, Sparkles } from 'lucide-react';
+import { Shield, LayoutDashboard, AlertTriangle, Briefcase, FileText, Activity, Bell, Radio, Home, Loader2 } from 'lucide-react';
 import CyberBackground3D from './CyberBackground3D';
+import { getHealth } from '../services/api';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -14,6 +15,8 @@ const navItems = [
 export default function Layout() {
   const location = useLocation();
   const [time, setTime] = useState(new Date().toLocaleTimeString());
+  const [health, setHealth] = useState(null);
+  const [apiDown, setApiDown] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -21,6 +24,35 @@ export default function Layout() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Real system status from the backend — nothing here is decorative.
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await getHealth();
+        if (!cancelled) {
+          setHealth(res.data);
+          setApiDown(false);
+        }
+      } catch {
+        if (!cancelled) setApiDown(true);
+      }
+    };
+    check();
+    const timer = setInterval(check, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const pipelineLabel = health ? (health.demoMode ? 'Investigation Pipeline • Demo Mode' : 'Investigation Pipeline • Live') : 'Investigation Pipeline';
+  const modelLabel = health
+    ? health.llmConfigured
+      ? 'Reasoning: LLM configured'
+      : 'Reasoning: deterministic (DEMO_MODE)'
+    : 'Connecting to agent fleet…';
 
   return (
     <div className="min-h-screen flex bg-[#030712] text-surface-100 relative overflow-hidden font-sans">
@@ -44,7 +76,7 @@ export default function Layout() {
                   AI
                 </span>
               </h1>
-              <p className="text-[11px] text-surface-400 font-medium">Risk & Fraud Intelligence</p>
+              <p className="text-[11px] text-surface-400 font-medium">Investigation Command Center</p>
             </div>
           </div>
         </div>
@@ -79,16 +111,24 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* System Status Footer */}
+        {/* System Status Footer — reflects the real backend state */}
         <div className="p-4 border-t border-surface-800/80 bg-surface-900/40">
           <div className="flex items-center gap-2 mb-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-bold text-emerald-400">Autonomous Neural Shield Active</span>
+            <span className={`w-2 h-2 rounded-full ${apiDown ? 'bg-red-400' : 'bg-emerald-400 animate-ping'}`} />
+            <span className={`text-xs font-bold ${apiDown ? 'text-red-400' : 'text-emerald-400'}`}>
+              {apiDown ? 'API Unreachable' : 'Investigation Pipeline Active'}
+            </span>
           </div>
           <div className="text-[11px] text-surface-400 font-mono space-y-0.5">
-            <p>Model: Gemini Multi-Agent</p>
-            <p className="text-surface-500">Latency: 42ms • Integrity 99.9%</p>
+            <p className="truncate" title={pipelineLabel}>{pipelineLabel}</p>
+            <p className="text-surface-500 truncate" title={modelLabel}>{modelLabel}</p>
           </div>
+          <Link
+            to="/"
+            className="mt-3 flex items-center gap-1.5 text-[11px] text-surface-400 hover:text-accent-400 transition-colors"
+          >
+            <Home className="w-3 h-3" /> About FraudLens
+          </Link>
         </div>
       </aside>
 
@@ -98,9 +138,23 @@ export default function Layout() {
         <header className="h-16 bg-surface-950/60 backdrop-blur-xl border-b border-surface-800/80 px-8 flex items-center justify-between shrink-0 z-20">
           {/* Left Security Status Pill */}
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono font-bold shadow-lg shadow-red-500/10">
-              <Radio className="w-3.5 h-3.5 animate-pulse" />
-              <span>DEFCON-2 • ELEVATED RISK MONITORING</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent-500/10 border border-accent-500/30 text-accent-400 text-xs font-mono font-bold">
+              {apiDown ? (
+                <>
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>API OFFLINE</span>
+                </>
+              ) : health ? (
+                <>
+                  <Radio className="w-3.5 h-3.5 animate-pulse" />
+                  <span>MONITORING • EVIDENCE-BACKED INVESTIGATION</span>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>CONNECTING…</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -108,20 +162,25 @@ export default function Layout() {
           <div className="flex items-center gap-5 text-xs text-surface-400">
             <div className="hidden md:flex items-center gap-2 bg-surface-900/80 border border-surface-800 px-3 py-1.5 rounded-xl font-mono">
               <Activity className="w-3.5 h-3.5 text-accent-400" />
-              <span>LIVE SYS TIME: {time}</span>
+              <span>SYS TIME: {time}</span>
             </div>
-            <button className="p-2 rounded-xl bg-surface-900/80 border border-surface-800 text-surface-300 hover:text-white hover:border-surface-700 transition-all">
+            <Link
+              to="/alerts"
+              className="p-2 rounded-xl bg-surface-900/80 border border-surface-800 text-surface-300 hover:text-white hover:border-accent-500/50 transition-all"
+              title="Review active alerts"
+              aria-label="Review active alerts"
+            >
               <Bell className="w-4 h-4" />
-            </button>
+            </Link>
             <div className="flex items-center gap-2.5 pl-3 border-l border-surface-800">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-accent-500 to-indigo-500 p-0.5">
                 <div className="w-full h-full bg-surface-950 rounded-full flex items-center justify-center font-bold text-white text-xs">
-                  AI
+                  SA
                 </div>
               </div>
               <div className="hidden lg:block text-left">
                 <p className="text-xs font-bold text-white leading-tight">SecOps Analyst</p>
-                <p className="text-[10px] text-surface-400">SOC Investigator #409</p>
+                <p className="text-[10px] text-surface-400">Human reviewer</p>
               </div>
             </div>
           </div>

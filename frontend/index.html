@@ -10,6 +10,43 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Browsers suspend requestAnimationFrame in background tabs. Animation
+      // libraries (GSAP, Framer Motion) then park their loop on a frame that
+      // never fires, so components stay stuck at their initial state: KPI
+      // counters read 0 and panels render at opacity 0. Until the tab is
+      // focused again the dashboard looks broken.
+      //
+      // While the document is hidden, drive frames from a timer so content
+      // still settles to its real state. When the tab is visible the native
+      // scheduler is used unchanged, so foreground animation is unaffected.
+      // This runs before the app bundle so the libraries capture the wrapper.
+      (function () {
+        if (typeof window.requestAnimationFrame !== 'function') return;
+        var nativeRAF = window.requestAnimationFrame.bind(window);
+        var nativeCAF = window.cancelAnimationFrame.bind(window);
+        var timers = new Map();
+        var seq = 1;
+
+        window.requestAnimationFrame = function (callback) {
+          if (document.visibilityState !== 'hidden') return nativeRAF(callback);
+          var id = seq++;
+          timers.set(
+            id,
+            setTimeout(function () {
+              timers.delete(id);
+              callback(performance.now());
+            }, 16)
+          );
+          return id;
+        };
+
+        window.cancelAnimationFrame = function (id) {
+          if (timers.delete(id)) return;
+          nativeCAF(id);
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

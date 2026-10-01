@@ -49,8 +49,12 @@ const investigationSchema = new mongoose.Schema(
       note: { type: String, default: '' },
       decidedBy: { type: String, default: '' },
       decidedAt: { type: Date, default: null },
+      // Areas requested when the decision was REQUEST_INVESTIGATION.
+      areas: { type: [String], default: [] },
     },
     investigationCycles: { type: Number, default: 1 },
+    focusAreas: { type: [String], default: [] },
+    lastFocusResult: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );

@@ -111,3 +111,56 @@
   border-radius: 12px !important;
 }
 
+/* --- Print: the investigation report must print as a clean document --- */
+@media print {
+  @page {
+    margin: 14mm 12mm;
+    size: A4;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Chrome that is not part of the report. */
+  aside,
+  header,
+  .no-print,
+  canvas,
+  .react-flow__panel,
+  .react-flow__minimap,
+  .react-flow__controls,
+  .react-flow__attribution {
+    display: none !important;
+  }
+
+  main {
+    overflow: visible !important;
+  }
+
+  main > div {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  main * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .card {
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    border: 1px solid #d4d4d8 !important;
+  }
+
+  section,
+  tr,
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+

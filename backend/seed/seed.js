@@ -417,7 +417,8 @@ async function seed() {
       customerId: 'C1091',
       triggerReasons: ['SHARED_DEVICE'],
       severity: 'HIGH',
-      status: 'OPEN',
+      status: 'RESOLVED',
+      relatedCaseId: 'CASE-1043',
     },
     {
       alertId: 'ALR-1044',
@@ -425,7 +426,8 @@ async function seed() {
       customerId: 'C1177',
       triggerReasons: ['SHARED_DEVICE'],
       severity: 'HIGH',
-      status: 'OPEN',
+      status: 'RESOLVED',
+      relatedCaseId: 'CASE-1044',
     },
     {
       alertId: 'ALR-1045',
@@ -433,7 +435,8 @@ async function seed() {
       customerId: 'C1001',
       triggerReasons: ['AMOUNT_ANOMALY'],
       severity: 'MEDIUM',
-      status: 'OPEN',
+      status: 'RESOLVED',
+      relatedCaseId: 'CASE-1045',
     },
     {
       alertId: 'ALR-1046',
@@ -441,7 +444,8 @@ async function seed() {
       customerId: 'C1003',
       triggerReasons: ['UNUSUAL_TIME'],
       severity: 'LOW',
-      status: 'OPEN',
+      status: 'FALSE_POSITIVE',
+      relatedCaseId: 'CASE-1046',
     },
     {
       alertId: 'ALR-1047',
@@ -506,7 +510,9 @@ async function seed() {
       alertId: 'ALR-1043',
       transactionId: 'TX3005',
       customerId: 'C1091',
-      status: 'AWAITING_HUMAN_REVIEW',
+      // Below the HIGH threshold, so the supervisor closes it without a
+      // mandatory human decision. Kept consistent with runInvestigation().
+      status: 'CLOSED',
       evidence: [
         { evidenceId: 'EV-001', type: 'SHARED_DEVICE', description: 'Device D8821 shared with C1024, C1177', severity: 'HIGH', source: 'DeviceAgent', details: {} },
       ],
@@ -518,6 +524,7 @@ async function seed() {
       riskLevel: 'LOW',
       riskFactors: [{ type: 'SHARED_DEVICE', weight: 15, evidenceIds: ['EV-001'], description: 'Shared device' }],
       recommendation: 'No immediate human action required',
+      humanDecision: { action: 'CLOSE_APPROVE', note: 'Shared device already known; no further action.', decidedBy: 'investigator', decidedAt: daysAgo(21) },
       investigationCycles: 1,
     },
     {
@@ -525,7 +532,7 @@ async function seed() {
       alertId: 'ALR-1044',
       transactionId: 'TX4004',
       customerId: 'C1177',
-      status: 'AWAITING_HUMAN_REVIEW',
+      status: 'CLOSED',
       evidence: [
         { evidenceId: 'EV-001', type: 'SHARED_DEVICE', description: 'Device D8821 shared with C1024, C1091', severity: 'HIGH', source: 'DeviceAgent', details: {} },
       ],
@@ -537,6 +544,7 @@ async function seed() {
       riskLevel: 'LOW',
       riskFactors: [{ type: 'SHARED_DEVICE', weight: 15, evidenceIds: ['EV-001'], description: 'Shared device' }],
       recommendation: 'No immediate human action required',
+      humanDecision: { action: 'CLOSE_APPROVE', note: 'Shared device already known; no further action.', decidedBy: 'investigator', decidedAt: daysAgo(20) },
       investigationCycles: 1,
     },
     {
@@ -582,6 +590,31 @@ async function seed() {
   ];
   await Investigation.insertMany(prevCases);
   console.log(`[seed] Inserted ${prevCases.length} previous investigation cases`);
+
+  // --- Agent log for the pre-investigated cases -----------------------------
+  // The dashboard agent-activity feed reads AgentLog. These cases were seeded
+  // already-investigated, so their log is derived directly from the persisted
+  // agentResults — no statuses are invented here. CASE-1042 is seeded as a
+  // transaction rather than an investigation, so the investigator runs that
+  // pipeline live from the case page.
+  const agentLogs = [];
+  for (const c of prevCases) {
+    for (const r of c.agentResults) {
+      agentLogs.push({
+        caseId: c.caseId,
+        agentName: r.agentName,
+        status: r.status,
+        inputSummary: `${c.caseId} subject transaction`,
+        outputSummary: r.summary,
+        evidenceIds: r.evidenceIds || [],
+        cycle: 1,
+        duration: r.duration || 0,
+        timestamp: new Date(),
+      });
+    }
+  }
+  await AgentLog.insertMany(agentLogs);
+  console.log(`[seed] Inserted ${agentLogs.length} agent log entries`);
 
   console.log('[seed] Seed complete');
   console.log('[seed] Main demo case: CASE-1042 (C1024, TX1042, ₹78,500, Mumbai, 02:17 AM, D8821)');

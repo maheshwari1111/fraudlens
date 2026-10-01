@@ -6,6 +6,7 @@ const Transaction = require('../../models/Transaction');
 const Customer = require('../../models/Customer');
 const Alert = require('../../models/Alert');
 const { EvidenceRegistry } = require('../evidence');
+const { deriveCaseId } = require('../caseId');
 
 const { analyzeTransaction } = require('./transactionAgent');
 const { analyzeBehaviour } = require('./behaviourAgent');
@@ -13,6 +14,7 @@ const { detectAnomalies } = require('./anomalyAgent');
 const { analyzeDevice } = require('./deviceAgent');
 const { analyzeLocation } = require('./locationAgent');
 const { buildRelationshipGraph } = require('./relationshipAgent');
+const { runFocusAnalysis, validateAreas, AREA_LABELS } = require('./focusAgent');
 const { investigate } = require('./investigationAgent');
 const { calculateRisk } = require('./riskEngine');
 const { generateReport } = require('./reportAgent');
@@ -24,6 +26,7 @@ const { generateReport } = require('./reportAgent');
  *   1. Create investigation record
  *   2. Run analysis agents (parallel where safe)
  *   3. Combine evidence into a single registry
+ *   3b. Optional focused deep-dive ("Request Additional Investigation")
  *   4. Investigation Agent (LLM, grounded in evidence)
  *   5. Deterministic Risk Engine
  *   6. Human-review determination
@@ -33,8 +36,10 @@ const { generateReport } = require('./reportAgent');
  * If an individual agent fails, the failure is logged and the investigation
  * continues with the evidence available (marked PARTIAL).
  */
-async function runInvestigation({ alertId, transactionId, customerId, cycle = 1, requestedBy = 'system' }) {
+async function runInvestigation({ alertId, transactionId, customerId, cycle = 1, requestedBy = 'system', focusAreas = null }) {
   const startedAt = Date.now();
+
+  const { areas, invalid: invalidAreas } = validateAreas(focusAreas);
 
   // --- Load core entities -------------------------------------------------
   const transaction = await Transaction.findOne({ transactionId });
@@ -48,9 +53,8 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
   // --- Create or fetch investigation --------------------------------------
   let investigation = await Investigation.findOne({ transactionId });
   if (!investigation) {
-    // Derive case ID from transaction ID: TX1042 → CASE-1042
-    const numericPart = transactionId.replace(/\D/g, '');
-    const caseId = `CASE-${numericPart}`;
+    // Case ID is derived from the transaction ID: TX1042 → CASE-1042
+    const caseId = deriveCaseId(transactionId);
     investigation = await Investigation.create({
       caseId,
       alertId: alert ? alert.alertId : null,
@@ -66,15 +70,86 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
 
   const evidence = new EvidenceRegistry();
   const agentResults = [];
+
+  /**
+   * Builds a short, factual finding for an agent from the result it returned.
+   * Agents do not all expose a `summary`; without this the log would only say
+   * "DeviceAgent completed", which tells an investigator nothing. Every string
+   * here is composed from values already present in the agent's own output.
+   */
+  const describeResult = (name, result) => {
+    if (!result) return null;
+    if (result.summary) return result.summary;
+
+    const money = (n) => `₹${Number(n).toLocaleString('en-IN')}`;
+
+    switch (name) {
+      case 'TransactionAgent': {
+        const v = result.velocity || {};
+        return `${v.recentCount ?? 0} transaction(s) in the last 30 days, ${v.last24hCount ?? 0} in the last 24h totalling ${money(v.last24hAmount ?? 0)}.`;
+      }
+      case 'BehaviourAgent': {
+        const p = result.profile || {};
+        const dev = result.deviation ? ` Deviation: ${result.deviation}.` : '';
+        return `Compared against ${p.historicalCount ?? 0} prior transaction(s) averaging ${money(p.historicalAverage ?? 0)}.${dev}`;
+      }
+      case 'AnomalyAgent': {
+        const list = result.anomalies || [];
+        if (list.length === 0) return 'No rule-based anomalies detected.';
+        return `${list.length} anomaly type(s) detected: ${list.map((a) => a.type).join(', ')}.`;
+      }
+      case 'DeviceAgent': {
+        const parts = [];
+        if (result.deviceId) {
+          parts.push(`Device ${result.deviceId}`);
+          parts.push(result.isNewForCustomer ? 'is new for this customer' : 'is in the usual device set');
+          if (result.relatedCustomers?.length) parts.push(`shared with ${result.relatedCustomers.join(', ')}`);
+          if (result.previousCases?.length) parts.push(`seen in prior case(s) ${result.previousCases.join(', ')}`);
+          return `${parts.join(' — ')}.`;
+        }
+        return 'No device recorded on the subject transaction.';
+      }
+      case 'LocationAgent': {
+        return result.isUnusual
+          ? `${result.current} is outside the customer's usual location(s): ${(result.usual || []).join(', ') || 'none recorded'}.`
+          : `${result.current} matches the customer's usual location pattern.`;
+      }
+      case 'PatternAgent': {
+        const n = result.nodes?.length ?? 0;
+        const e = result.edges?.length ?? 0;
+        return `Discovered ${n} entit(y/ies) and ${e} relationship(s) from the database.`;
+      }
+      case 'InvestigationAgent': {
+        const f = result.findings || [];
+        return f.length
+          ? `${f.length} finding(s) grounded in registered evidence.`
+          : 'No grounded findings produced.';
+      }
+      case 'FocusAgent': {
+        return result.summary || 'No additional areas selected.';
+      }
+      case 'RiskEngine': {
+        return result.level
+          ? `Score ${result.score}/100 (${result.level}) from ${(result.factors || []).length} weighted rule(s).`
+          : null;
+      }
+      case 'Supervisor':
+        return 'Investigation pipeline executed.';
+      default:
+        return null;
+    }
+  };
+
   const logAgent = async (name, fn, inputSummary) => {
     const t0 = Date.now();
     try {
       const result = await fn();
       const duration = Date.now() - t0;
+      const summary = describeResult(name, result) || `${name} completed`;
       agentResults.push({
         agentName: name,
         status: 'SUCCESS',
-        summary: result.summary || `${name} completed`,
+        summary,
         evidenceIds: result.evidence ? result.evidence.map((e) => e.evidenceId) : [],
         anomalies: result.anomalies || [],
         data: result.data || result,
@@ -85,7 +160,7 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
         agentName: name,
         status: 'SUCCESS',
         inputSummary,
-        outputSummary: result.summary || `${name} completed`,
+        outputSummary: summary,
         evidenceIds: result.evidence ? result.evidence.map((e) => e.evidenceId) : [],
         cycle,
         duration,
@@ -162,6 +237,26 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
     });
   }
 
+  // --- Phase 3b: focused deep-dive (Request Additional Investigation) ------
+  // Runs BEFORE the reasoning/risk phases so newly discovered evidence is
+  // visible to the Investigation Agent and the evidence panel.
+  let focus = null;
+  if (areas.length > 0) {
+    focus = await logAgent('FocusAgent', () =>
+      runFocusAnalysis({ transaction, customer, areas, excludeCaseId: investigation.caseId }),
+      `areas=${areas.join(',')}`);
+
+    for (const e of focus?.evidence || []) {
+      evidence.add({
+        type: e.type,
+        description: e.description,
+        severity: e.severity,
+        source: e.source,
+        details: e.details || {},
+      });
+    }
+  }
+
   // --- Phase 4: Investigation Agent (LLM, grounded) -----------------------
   const investigationSummary = await logAgent('InvestigationAgent', () =>
     investigate({
@@ -204,6 +299,10 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
   investigation.riskScore = risk.score;
   investigation.riskLevel = risk.level;
   investigation.riskFactors = risk.factors;
+  investigation.focusAreas = focus ? focus.areas : [];
+  investigation.lastFocusResult = focus
+    ? { areas: focus.areaResults, totalRecords: focus.totalRecords, cycle, at: new Date() }
+    : investigation.lastFocusResult;
   investigation.recommendation = requiresHumanReview
     ? 'HUMAN INVESTIGATION REQUIRED'
     : 'No immediate human action required';
@@ -227,6 +326,8 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
       agentCount: agentResults.length,
       duration: Date.now() - startedAt,
       cycle,
+      ...(areas.length ? { focusAreas: areas, focusAreaLabels: areas.map((a) => AREA_LABELS[a]) } : {}),
+      ...(invalidAreas.length ? { rejectedFocusAreas: invalidAreas } : {}),
     },
   });
 
@@ -239,10 +340,12 @@ async function runInvestigation({ alertId, transactionId, customerId, cycle = 1,
     agentResults,
     risk,
     graph,
+    focus,
+    analyses: { txnAnalysis, behaviour, deviceAnalysis, locationAnalysis, anomalies: anomalies?.anomalies || [] },
   });
   await Report.findOneAndUpdate({ caseId: investigation.caseId }, report, { upsert: true, new: true });
 
-  return { investigation, report, risk, evidence: evidence.all(), agentResults };
+  return { investigation, report, risk, evidence: evidence.all(), agentResults, focus, rejectedFocusAreas: invalidAreas };
 }
 
 module.exports = { runInvestigation };
