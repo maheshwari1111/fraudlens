@@ -4,60 +4,72 @@
 
 @layer base {
   body {
-    @apply bg-surface-950 text-surface-100 font-sans antialiased selection:bg-accent-500/30 selection:text-accent-300;
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.08) 0px, transparent 50%),
-      radial-gradient(at 50% 100%, rgba(239, 68, 68, 0.05) 0px, transparent 50%),
-      linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+    @apply bg-[#030712] text-surface-100 font-sans antialiased overflow-x-hidden selection:bg-accent-500/30 selection:text-accent-400;
   }
 }
 
 @layer components {
+  /* Glassmorphism Cards */
   .card {
-    @apply bg-surface-900/60 backdrop-blur-xl border border-surface-800/80 rounded-2xl p-6 shadow-cyber-glass transition-all duration-300 relative overflow-hidden;
+    @apply bg-surface-900/60 backdrop-blur-xl border border-surface-800/80 rounded-2xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] transition-all duration-300 hover:border-surface-700/80;
   }
-  .card:hover {
-    @apply border-surface-700/90 shadow-neon-accent;
-  }
-  .card-glass-glow {
-    @apply card border-accent-500/20 bg-gradient-to-br from-surface-900/80 via-surface-900/40 to-accent-700/20;
+  .card-glow {
+    @apply card relative overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-br before:from-accent-500/10 before:via-transparent before:to-purple-500/10 before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-500;
   }
   .card-header {
     @apply text-xs font-bold text-surface-400 uppercase tracking-widest mb-4 flex items-center justify-between;
   }
   .badge {
-    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide border;
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide backdrop-blur-md transition-all duration-300;
   }
+  
+  /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98];
   }
   .btn-primary {
-    @apply btn bg-gradient-to-r from-accent-600 to-accent-500 text-white shadow-lg shadow-accent-600/30 hover:shadow-accent-500/50 hover:brightness-110 border border-accent-400/30;
+    @apply btn bg-gradient-to-r from-accent-600 via-sky-500 to-indigo-600 text-white shadow-lg shadow-accent-600/25 hover:shadow-accent-500/40 hover:scale-[1.02] border border-accent-400/30;
   }
   .btn-secondary {
-    @apply btn bg-surface-800/80 hover:bg-surface-700/80 text-surface-200 border border-surface-700/60 backdrop-blur-md;
+    @apply btn bg-surface-800/80 backdrop-blur-md text-surface-200 hover:bg-surface-700/80 border border-surface-700/60 hover:border-surface-600;
   }
   .btn-danger {
-    @apply btn bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/10;
+    @apply btn bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 shadow-lg shadow-red-500/10;
   }
   .btn-success {
-    @apply btn bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10;
+    @apply btn bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 shadow-lg shadow-emerald-500/10;
   }
   .btn-warning {
-    @apply btn bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 shadow-lg shadow-amber-500/10;
+    @apply btn bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 shadow-lg shadow-amber-500/10;
   }
-  .btn-cyber {
-    @apply btn bg-gradient-to-r from-purple-600 to-accent-600 text-white border border-purple-400/30 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50;
-  }
+
+  /* Table styling */
   .table-header {
-    @apply text-xs font-bold text-surface-400 uppercase tracking-wider bg-surface-950/40;
+    @apply text-xs font-bold text-surface-400 uppercase tracking-wider py-3.5 px-4;
   }
   .table-cell {
-    @apply px-4 py-3.5 text-sm text-surface-300;
+    @apply px-4 py-3.5 text-sm text-surface-300 border-b border-surface-800/40;
   }
+}
+
+/* Custom glowing text */
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-white via-surface-200 to-accent-400;
+}
+.text-gradient-cyan {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-accent-400 via-sky-300 to-indigo-400;
+}
+.text-gradient-risk {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-red-400 via-orange-400 to-amber-300;
+}
+
+/* Glowing animations */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 3s infinite ease-in-out;
 }
 
 /* Custom Scrollbar */
@@ -73,31 +85,29 @@
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #0ea5e9;
+  background: #334155;
 }
 
-/* React Flow Dark Theme Overrides */
-.react-flow__attribution {
-  display: none;
-}
+/* React Flow Dark Cyber Theme */
+.react-flow__attribution { display: none; }
 .react-flow__controls {
-  background: rgba(30, 41, 59, 0.8) !important;
+  background: rgba(15, 23, 42, 0.8) !important;
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.8) !important;
+  border: 1px solid rgba(51, 65, 85, 0.6) !important;
   border-radius: 12px !important;
 }
 .react-flow__controls-button {
   background: transparent !important;
-  border-bottom: 1px solid rgba(51, 65, 85, 0.6) !important;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5) !important;
   fill: #94a3b8 !important;
 }
 .react-flow__controls-button:hover {
-  background: rgba(14, 165, 233, 0.2) !important;
+  background: rgba(51, 65, 85, 0.5) !important;
   fill: #38bdf8 !important;
 }
 .react-flow__minimap {
   background: rgba(15, 23, 42, 0.9) !important;
-  border: 1px solid rgba(51, 65, 85, 0.8) !important;
+  border: 1px solid rgba(51, 65, 85, 0.6) !important;
   border-radius: 12px !important;
 }
 
